@@ -1319,13 +1319,19 @@ p.add(t.target);p=u(p);for(l=p.next();!l.done;l=p.next())a(l.value)}),Vd=0,ha=ne
         // ==== DNS Проверка ====
         async function fetchDns(host){
             try {
-                const res = await fetch(`https://cloudflare-dns.com/query?name=${host}&type=A`, {headers:{'Accept':'application/dns-json'}});
-                const json = await res.json();
-                if(json.Status===3) return {ip:'N/A', status:'NXDOMAIN'};
-                if(json.Answer?.length) return {ip:json.Answer[0].data, status:'Active'};
-                return {ip:'N/A', status:'NODATA'};
-            } catch { return {ip:'Unknown',status:'TIMEOUT'}; }
+                const proxy = 'https://api.allorigins.win/get?url=';
+                const url = `https://cloudflare-dns.com/query?name=${host}&type=A`;
+                const res = await fetch(proxy + encodeURIComponent(url));
+                const jsonText = await res.json();
+                const json = JSON.parse(jsonText.contents); // AllOrigins возвращает текст в поле contents
+                if(json.Status === 3) return { ip:'N/A', status:'NXDOMAIN' };
+                if(json.Answer?.length) return { ip:json.Answer[0].data, status:'Active' };
+                return { ip:'N/A', status:'NODATA' };
+            } catch(e) {
+                return { ip:'Unknown', status:'TIMEOUT' };
+            }
         }
+
         
         // ==== Гео-проверка (HTTPS, работает на GitHub Pages) ====
         async function fetchGeo(ip){
@@ -1399,5 +1405,6 @@ p.add(t.target);p=u(p);for(l=p.next();!l.done;l=p.next())a(l.value)}),Vd=0,ha=ne
 
 
 </body></html>
+
 
 
