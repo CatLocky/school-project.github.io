@@ -679,21 +679,30 @@
         ];
 
         let heuristic = checkHeuristics(url);
-        let dnsData, geoData, sslData;
+        let dnsData = null, geoData = null, sslData = null;
 
         for (const step of steps) {
             loaderText.innerText = step.text;
             progressBar.style.width = `${step.progress}%`;
 
-            if (step.progress === 40) dnsData = await fetchDns(hostname);
-            if (step.progress === 65) sslData = await checkSsl(url);
-            if (step.progress === 85) geoData = (dnsData && dnsData.ip && dnsData.ip !== 'N/A') ? await fetchGeo(dnsData.ip) : null;
+            try {
+                if (step.progress === 40) dnsData = await fetchDns(hostname);
+                if (step.progress === 65) sslData = await checkSsl(url);
+                if (step.progress === 85) geoData = (dnsData && dnsData.ip && dnsData.ip !== 'N/A') 
+                                                    ? await fetchGeo(dnsData.ip) 
+                                                    : null;
+            } catch (err) {
+                console.error("Ошибка на шаге:", step.text, err);
+            }
 
+            // Если цикл зависнет, таймаут гарантирует, что шаг закончится
             await new Promise(r => setTimeout(r, 500));
         }
 
+        // Показываем результаты сразу после всех шагов
         showResults(heuristic, dnsData, geoData, sslData, isTrusted);
     });
+
 
     function checkHeuristics(url) {
         let score = 100;
