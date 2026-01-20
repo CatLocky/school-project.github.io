@@ -739,7 +739,7 @@
 
     async function fetchDns(host) {
         try {
-            const res = await fetch(`https://cloudflare-dns.com/query?name=${host}&type=A`, {
+            const res = await fetch(`https://dns.google/resolve?name=${host}&type=A`, {
                 headers: { 'Accept': 'application/dns-json' }
             });
             const json = await res.json();
@@ -854,3 +854,4 @@
 
 
 </body></html>
+
