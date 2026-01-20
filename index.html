@@ -760,7 +760,7 @@
         
         async function fetchGeo(ip) {
             try {
-                const res = await fetchWithTimeout(`https://ipapi.co/${ip}/json/`);
+                const res = await fetchWithTimeout(`https://cors-anywhere.herokuapp.com/https://ipapi.co/${ip}/json/`);
                 if (!res) return null;
                 const data = await res.json();
                 if (data.error) return null;
@@ -828,5 +828,6 @@
 
 
 </body></html>
+
 
 
