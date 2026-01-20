@@ -1317,32 +1317,46 @@ p.add(t.target);p=u(p);for(l=p.next();!l.done;l=p.next())a(l.value)}),Vd=0,ha=ne
         }
         
         // ==== DNS Проверка ====
-        async function fetchDns(host){
+        // ==== DNS Проверка через Cloudflare Worker ====
+        async function fetchDns(host) {
             try {
-                const proxy = 'https://api.allorigins.win/get?url=';
-                const url = `https://cloudflare-dns.com/query?name=${host}&type=A`;
-                const res = await fetch(proxy + encodeURIComponent(url));
-                const jsonText = await res.json();
-                const json = JSON.parse(jsonText.contents); // AllOrigins возвращает текст в поле contents
-                if(json.Status === 3) return { ip:'N/A', status:'NXDOMAIN' };
-                if(json.Answer?.length) return { ip:json.Answer[0].data, status:'Active' };
-                return { ip:'N/A', status:'NODATA' };
-            } catch(e) {
-                return { ip:'Unknown', status:'TIMEOUT' };
+                // Вместо api.allorigins используем свой воркер
+                const workerUrl = 'https://school.gerandilas.workers.dev/dns/' + host;
+                const res = await fetch(workerUrl);
+                const json = await res.json();
+        
+                if (json.Status === 3) return { ip: 'N/A', status: 'NXDOMAIN' };
+                if (json.Answer?.length) return { ip: json.Answer[0].data, status: 'Active' };
+                return { ip: 'N/A', status: 'NODATA' };
+            } catch (e) {
+                return { ip: 'Unknown', status: 'TIMEOUT' };
             }
         }
+        
 
         
         // ==== Гео-проверка (HTTPS, работает на GitHub Pages) ====
-        async function fetchGeo(ip){
+        async function fetchGeo(ip) {
             try {
-                const res = await fetch(`https://ipwho.is/${ip}`);
-                if(!res.ok) return null;
+                // Используем свой воркер
+                const workerUrl = 'https://school.gerandilas.workers.dev/geo/' + ip;
+                const res = await fetch(workerUrl);
                 const data = await res.json();
-                if(!data.success) return null;
-                return {city:data.city,region:data.region,country:data.country,isp:data.connection?.isp};
-            } catch { return null; }
+        
+                // ipwho.is возвращает поле success, воркер его передаёт
+                if (!data.success && !data.ip) return null;
+        
+                return {
+                    city: data.city,
+                    region: data.region,
+                    country: data.country,
+                    isp: data.connection?.isp
+                };
+            } catch {
+                return null;
+            }
         }
+
         
         // ==== Проверка SSL (симуляция) ====
         async function checkSsl(url){ return { valid: url.protocol==='https:', issuer: url.protocol==='https:'?"Valid Certificate":"NONE", details: url.protocol==='https:'?"SSL/TLS обнаружено":"Отсутствует" }; }
@@ -1405,6 +1419,7 @@ p.add(t.target);p=u(p);for(l=p.next();!l.done;l=p.next())a(l.value)}),Vd=0,ha=ne
 
 
 </body></html>
+
 
 
 
