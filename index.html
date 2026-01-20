@@ -629,229 +629,204 @@
     </div>
 
     <script>
-    const SUSPICIOUS_WORDS = ['login', 'verify', 'update', 'account', 'secure', 'bank', 'confirm', 'password', 'free', 'gift', 'prize', 'win', 'bonus', 'billing', 'invoice', 'pay'];
-    const SHADY_TLDS = ['.xyz', '.top', '.click', '.link', '.pw', '.zip', '.mov', '.ga', '.tk', '.ml', '.cf', '.gq', '.icu', '.monster'];
-
-    // Белый список крупных доверенных доменов
-    const TRUSTED_DOMAINS = [
-        "google.com",
-        "www.google.com",
-        "youtube.com",
-        "cloudflare.com",
-        "microsoft.com",
-        "apple.com",
-        "github.com"
-    ];
-
-    const urlInput = document.getElementById('urlInput');
-    const scanBtn = document.getElementById('scanBtn');
-    const loader = document.getElementById('loader');
-    const loaderText = document.getElementById('loaderText');
-    const progressBar = document.getElementById('progressBar');
-    const results = document.getElementById('results');
-
-    scanBtn.addEventListener('click', async () => {
-        const val = urlInput.value.trim();
-        if(!val) return;
-
-        results.classList.add('hidden');
-        loader.classList.remove('hidden');
-        progressBar.style.width = '0%';
-
-        let url;
-        try {
-            url = new URL(val.startsWith('http') ? val : `https://${val}`);
-        } catch (e) {
-            alert('Некорректный формат URL.');
-            loader.classList.add('hidden');
-            return;
-        }
-
-        const hostname = url.hostname;
-        const isTrusted = TRUSTED_DOMAINS.some(d => hostname.endsWith(d));
-
-        const steps = [
-            { text: "Запуск эвристического анализа...", progress: 15 },
-            { text: "Поиск записей DNS-A через Cloudflare DoH...", progress: 40 },
-            { text: "Валидация SSL/TLS сертификата...", progress: 65 },
-            { text: "Гео-локация узла...", progress: 85 },
-            { text: "Синтез финального отчета...", progress: 100 }
+        const SUSPICIOUS_WORDS = ['login', 'verify', 'update', 'account', 'secure', 'bank', 'confirm', 'password', 'free', 'gift', 'prize', 'win', 'bonus', 'billing', 'invoice', 'pay'];
+        const SHADY_TLDS = ['.xyz', '.top', '.click', '.link', '.pw', '.zip', '.mov', '.ga', '.tk', '.ml', '.cf', '.gq', '.icu', '.monster'];
+        
+        // Белый список крупных доверенных доменов
+        const TRUSTED_DOMAINS = [
+            "google.com",
+            "www.google.com",
+            "youtube.com",
+            "cloudflare.com",
+            "microsoft.com",
+            "apple.com",
+            "github.com"
         ];
-
-        let heuristic = checkHeuristics(url);
-        let dnsData = null, geoData = null, sslData = null;
-
-        for (const step of steps) {
-            loaderText.innerText = step.text;
-            progressBar.style.width = `${step.progress}%`;
-
+        
+        const urlInput = document.getElementById('urlInput');
+        const scanBtn = document.getElementById('scanBtn');
+        const loader = document.getElementById('loader');
+        const loaderText = document.getElementById('loaderText');
+        const progressBar = document.getElementById('progressBar');
+        const results = document.getElementById('results');
+        const findingsLog = document.getElementById('findingsLog');
+        
+        // Функция с таймаутом для fetch
+        async function fetchWithTimeout(url, options = {}, timeout = 4000) {
+            const controller = new AbortController();
+            const id = setTimeout(() => controller.abort(), timeout);
             try {
-                if (step.progress === 40) dnsData = await fetchDns(hostname);
-                if (step.progress === 65) sslData = await checkSsl(url);
-                if (step.progress === 85) geoData = (dnsData && dnsData.ip && dnsData.ip !== 'N/A') 
-                                                    ? await fetchGeo(dnsData.ip) 
-                                                    : null;
-            } catch (err) {
-                console.error("Ошибка на шаге:", step.text, err);
+                const response = await fetch(url, { ...options, signal: controller.signal });
+                clearTimeout(id);
+                return response;
+            } catch (e) {
+                clearTimeout(id);
+                return null;
             }
-
-            // Если цикл зависнет, таймаут гарантирует, что шаг закончится
-            await new Promise(r => setTimeout(r, 500));
         }
-
-        // Показываем результаты сразу после всех шагов
-        showResults(heuristic, dnsData, geoData, sslData, isTrusted);
-    });
-
-
-    function checkHeuristics(url) {
-        let score = 100;
-        let findings = [];
-
-        // Протокол
-        if (url.protocol === 'http:') {
-            score -= 20;
-            findings.push("Используется HTTP — данные передаются в открытом виде");
+        
+        scanBtn.addEventListener('click', async () => {
+            const val = urlInput.value.trim();
+            if (!val) return;
+        
+            results.classList.add('hidden');
+            loader.classList.remove('hidden');
+            progressBar.style.width = '0%';
+        
+            let url;
+            try {
+                url = new URL(val.startsWith('http') ? val : `https://${val}`);
+            } catch (e) {
+                alert('Некорректный формат URL.');
+                loader.classList.add('hidden');
+                return;
+            }
+        
+            const hostname = url.hostname;
+            const isTrusted = TRUSTED_DOMAINS.some(d => hostname.endsWith(d));
+        
+            const steps = [
+                { text: "Запуск эвристического анализа...", progress: 15 },
+                { text: "Поиск записей DNS-A через Google DNS...", progress: 40 },
+                { text: "Валидация SSL/TLS сертификата...", progress: 65 },
+                { text: "Гео-локация узла...", progress: 85 },
+                { text: "Синтез финального отчета...", progress: 100 }
+            ];
+        
+            let heuristic = checkHeuristics(url);
+            let dnsData = null, geoData = null, sslData = null;
+        
+            for (const step of steps) {
+                loaderText.innerText = step.text;
+                progressBar.style.width = `${step.progress}%`;
+        
+                try {
+                    if (step.progress === 40) dnsData = await fetchDns(hostname);
+                    if (step.progress === 65) sslData = await checkSsl(url);
+                    if (step.progress === 85) geoData = (dnsData && dnsData.ip && dnsData.ip !== 'N/A')
+                                                        ? await fetchGeo(dnsData.ip)
+                                                        : null;
+                } catch (err) {
+                    console.error("Ошибка на шаге:", step.text, err);
+                }
+        
+                await new Promise(r => setTimeout(r, 300)); // анимация прогресса
+            }
+        
+            showResults(heuristic, dnsData || {ip:'N/A', status:'TIMEOUT'}, geoData, sslData || {valid:false, issuer:'NONE', details:'Отсутствует'}, isTrusted);
+        });
+        
+        function checkHeuristics(url) {
+            let score = 100;
+            let findings = [];
+        
+            if (url.protocol === 'http:') {
+                score -= 20;
+                findings.push("Используется HTTP — данные передаются в открытом виде");
+            }
+        
+            const matches = SUSPICIOUS_WORDS.filter(w => url.toString().toLowerCase().includes(w));
+            if (matches.length > 0) {
+                score -= matches.length * 10;
+                findings.push(`Обнаружены фишинговые триггеры: ${matches.join(', ')}`);
+            }
+        
+            const isSusTld = SHADY_TLDS.some(tld => url.hostname.endsWith(tld));
+            if (isSusTld) {
+                score -= 20;
+                findings.push("Используется доменная зона с низкой репутацией");
+            }
+        
+            if (url.hostname.length > 30) {
+                score -= 10;
+                findings.push("Слишком длинное доменное имя (подмена возможна)");
+            }
+        
+            return { score, findings };
         }
-
-        // Подозрительные слова
-        const matches = SUSPICIOUS_WORDS.filter(w => url.toString().toLowerCase().includes(w));
-        if (matches.length > 0) {
-            score -= matches.length * 10;
-            findings.push(`Обнаружены фишинговые триггеры: ${matches.join(', ')}`);
+        
+        async function fetchDns(host) {
+            try {
+                const res = await fetchWithTimeout(`https://dns.google/resolve?name=${host}&type=A`);
+                if (!res) return { ip: 'Unknown', status: 'TIMEOUT' };
+                const json = await res.json();
+                if (json.Status === 3) return { ip: 'N/A', status: 'NXDOMAIN' };
+                if (json.Answer && json.Answer.length > 0) return { ip: json.Answer[0].data, status: 'Active' };
+                return { ip: 'N/A', status: 'NODATA' };
+            } catch (e) {
+                return { ip: 'Unknown', status: 'ERROR' };
+            }
         }
-
-        // TLD
-        const isSusTld = SHADY_TLDS.some(tld => url.hostname.endsWith(tld));
-        if (isSusTld) {
-            score -= 20;
-            findings.push("Используется доменная зона с низкой репутацией");
+        
+        async function fetchGeo(ip) {
+            try {
+                const res = await fetchWithTimeout(`https://ipapi.co/${ip}/json/`);
+                if (!res) return null;
+                const data = await res.json();
+                if (data.error) return null;
+                return data;
+            } catch (e) {
+                return null;
+            }
         }
-
-        // Длина домена
-        if (url.hostname.length > 30) {
-            score -= 10;
-            findings.push("Слишком длинное доменное имя (подмена возможна)");
+        
+        async function checkSsl(url) {
+            const isHttps = url.protocol === 'https:';
+            return {
+                valid: isHttps,
+                issuer: isHttps ? "Valid Certificate" : "NONE",
+                details: isHttps ? "SSL/TLS шифрование обнаружено" : "Шифрование отсутствует"
+            };
         }
-
-        return { score, findings };
-    }
-
-    async function fetchDns(host) {
-        try {
-            const res = await fetch(`https://dns.google/resolve?name=${host}&type=A`, {
-                headers: { 'Accept': 'application/dns-json' }
-            });
-            const json = await res.json();
-
-            if (json.Status === 3) return { ip: 'N/A', status: 'NXDOMAIN' };
-            if (json.Answer && json.Answer.length > 0) return { ip: json.Answer[0].data, status: 'NOERROR' };
-
-            return { ip: 'N/A', status: 'NODATA' };
-        } catch (e) {
-            return { ip: 'Unknown', status: 'TIMEOUT' };
-        }
-    }
-
-    async function fetchGeo(ip) {
-        try {
-            const res = await fetch(`https://ipapi.co/${ip}/json/`);
-            const data = await res.json();
-            if (data.error) return null;
-            return data;
-        } catch (e) {
-            return null;
-        }
-    }
-
-    async function checkSsl(url) {
-        const isHttps = url.protocol === 'https:';
-        return {
-            valid: isHttps,
-            issuer: isHttps ? "Valid Certificate" : "NONE",
-            details: isHttps ? "SSL/TLS шифрование обнаружено" : "Шифрование отсутствует"
-        };
-    }
-
-    function showResults(heuristic, dns, geo, ssl, isTrusted = false) {
-        // Очищаем предыдущие записи
-        findingsLog.innerHTML = '';
-
-        // === Эвристический анализ ===
-        addFinding(`Эвристическая оценка: ${heuristic.score}/100`, heuristic.score < 50 ? 'danger' : 'info');
-        if (heuristic.findings.length > 0) {
+        
+        function showResults(heuristic, dns, geo, ssl, isTrusted = false) {
+            findingsLog.innerHTML = '';
+        
+            addFinding(`Эвристическая оценка: ${heuristic.score}/100`, heuristic.score < 50 ? 'danger' : 'info');
             heuristic.findings.forEach(f => addFinding(f, 'warning'));
+        
+            if (dns.status === 'Active') addFinding(`IP-адрес: ${dns.ip} (DNS активен)`, 'info');
+            else if (dns.status === 'NXDOMAIN') addFinding(`DNS не найден для хоста`, 'warning');
+            else addFinding(`Ошибка запроса DNS`, 'danger');
+        
+            if (geo) addFinding(`Геолокация сервера: ${geo.country_name || 'Неизвестно'}, ${geo.region || 'Неизвестно'}`, 'info');
+            else addFinding(`Геолокация недоступна`, 'warning');
+        
+            if (ssl.valid) addFinding(`SSL-сертификат проверен: ${ssl.details} (Issuer: ${ssl.issuer})`, 'info');
+            else addFinding(`SSL-сертификат отсутствует или недействителен`, 'danger');
+        
+            if (isTrusted) addFinding('Сайт находится в списке доверенных', 'info');
         }
-
-        // === DNS и IP ===
-        if (dns.status === 'Active') {
-            addFinding(`IP-адрес: ${dns.ip} (DNS активен)`, 'info');
-        } else if (dns.status === 'NXDOMAIN') {
-            addFinding(`DNS не найден для хоста`, 'warning');
-        } else {
-            addFinding(`Ошибка запроса DNS`, 'danger');
+        
+        function addFinding(text, type = 'info') {
+            if (!findingsLog) return;
+        
+            const entry = document.createElement('div');
+            entry.textContent = text;
+            entry.classList.add('p-2', 'rounded', 'text-sm');
+        
+            switch(type) {
+                case 'info':
+                    entry.style.backgroundColor = 'rgba(6, 182, 212, 0.2)';
+                    entry.style.color = '#22d3ee';
+                    break;
+                case 'warning':
+                    entry.style.backgroundColor = 'rgba(234, 179, 8, 0.2)';
+                    entry.style.color = '#eab308';
+                    break;
+                case 'danger':
+                    entry.style.backgroundColor = 'rgba(239, 68, 68, 0.2)';
+                    entry.style.color = '#ef4444';
+                    break;
+            }
+        
+            findingsLog.appendChild(entry);
         }
+        </script>
 
-        // === Геолокация ===
-        if (geo) {
-            const country = geo.country_name || 'Неизвестно';
-            const region = geo.region || 'Неизвестно';
-            addFinding(`Геолокация сервера: ${country}, ${region}`, 'info');
-        } else {
-            addFinding(`Геолокация недоступна`, 'warning');
-        }
-
-        // === SSL ===
-        if (ssl.valid) {
-            addFinding(`SSL-сертификат проверен: ${ssl.details} (Issuer: ${ssl.issuer})`, 'info');
-        } else {
-            addFinding(`SSL-сертификат отсутствует или недействителен`, 'danger');
-        }
-
-        // === Дополнительно доверенный сайт ===
-        if (isTrusted) {
-            addFinding('Сайт находится в списке доверенных', 'info');
-        }
-    }
-
-    // Получаем div для логов
-    const findingsLog = document.getElementById('findingsLog');
-
-    /**
-     * Добавляет запись в лог обнаруженных угроз
-     * @param {string} text - Текст сообщения
-     * @param {'info'|'warning'|'danger'} type - Тип записи (цвет)
-     */
-    function addFinding(text, type = 'info') {
-        if (!findingsLog) return;
-
-        const entry = document.createElement('div');
-        entry.textContent = text;
-        entry.classList.add('p-2', 'rounded', 'text-sm');
-
-        // Цвета по типу
-        switch(type) {
-            case 'info':
-                entry.style.backgroundColor = 'rgba(6, 182, 212, 0.2)'; // циан
-                entry.style.color = '#22d3ee';
-                break;
-            case 'warning':
-                entry.style.backgroundColor = 'rgba(234, 179, 8, 0.2)'; // жёлтый
-                entry.style.color = '#eab308';
-                break;
-            case 'danger':
-                entry.style.backgroundColor = 'rgba(239, 68, 68, 0.2)'; // красный
-                entry.style.color = '#ef4444';
-                break;
-        }
-
-        findingsLog.appendChild(entry);
-    }
-
-
-    </script>
 
 
 
 </body></html>
+
 
